@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Lampette</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Lampette">
+<meta name="theme-color" content="#000000">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-512.png">
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+  :root {
+    --bg: #0b0b0d;
+    --panel: #17171b;
+    --line: #2a2a31;
+    --text: #f2f2f4;
+    --muted: #8d8d97;
+    --accent: #ffb85c;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%;
+    background: var(--bg); color: var(--text);
+    font: 16px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    overscroll-behavior: none;
+  }
+  body { overflow: hidden; }
+
+  /* ---------- Settings screen ---------- */
+  #settings {
+    height: 100%;
+    overflow-y: auto;
+    padding: calc(env(safe-area-inset-top) + 24px) 20px calc(env(safe-area-inset-bottom) + 24px);
+    display: flex; flex-direction: column; gap: 22px;
+    max-width: 480px; margin: 0 auto;
+  }
+  h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.02em; }
+  .preview {
+    height: 120px; border-radius: 20px;
+    border: 1px solid var(--line);
+    transition: background-color .2s;
+  }
+  section { display: flex; flex-direction: column; gap: 10px; }
+  .label { display: flex; justify-content: space-between; color: var(--muted); font-size: 14px; }
+  .label b { color: var(--text); font-weight: 600; }
+
+  .swatches { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+  .swatch {
+    aspect-ratio: 1; border-radius: 50%; border: 2px solid transparent;
+    padding: 0; cursor: pointer; position: relative;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
+  }
+  .swatch.active { border-color: var(--text); box-shadow: inset 0 0 0 3px var(--bg); }
+  .swatch.custom {
+    background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red);
+    overflow: hidden;
+  }
+  .swatch.custom input {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    opacity: 0; border: 0; padding: 0; cursor: pointer;
+  }
+
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 36px; background: transparent; margin: 0;
+  }
+  input[type=range]::-webkit-slider-runnable-track {
+    height: 8px; border-radius: 4px;
+    background: linear-gradient(to right, #000, var(--track, #fff));
+    border: 1px solid var(--line);
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: #fff; margin-top: -11px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.5);
+  }
+
+  .chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .chip {
+    padding: 12px 0; border-radius: 12px;
+    background: var(--panel); border: 1px solid var(--line);
+    color: var(--text); font: inherit; font-size: 15px; cursor: pointer;
+  }
+  .chip.active { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 600; }
+
+  #start {
+    margin-top: auto;
+    padding: 18px; border: 0; border-radius: 16px;
+    font: inherit; font-size: 18px; font-weight: 600;
+    background: var(--text); color: var(--bg); cursor: pointer;
+  }
+  .hint { color: var(--muted); font-size: 13px; text-align: center; margin: 0; }
+
+  /* ---------- Light screen ---------- */
+  #light {
+    position: fixed; inset: 0; display: none;
+    background: #000;
+  }
+  #light.on { display: block; }
+  #glow { position: absolute; inset: 0; transition: opacity 1s linear; }
+  #hud {
+    position: absolute; left: 0; right: 0;
+    bottom: calc(env(safe-area-inset-bottom) + 28px);
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+    opacity: 0; transition: opacity .4s; pointer-events: none;
+  }
+  #hud.show { opacity: 1; pointer-events: auto; }
+  .pill {
+    background: rgba(0,0,0,.55); color: #fff;
+    -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+    border-radius: 999px; padding: 10px 18px; font-size: 15px;
+    font-variant-numeric: tabular-nums;
+  }
+  #stop {
+    border: 0; font: inherit; font-weight: 600; cursor: pointer;
+    background: rgba(0,0,0,.7); color: #fff; padding: 14px 32px;
+  }
+</style>
+</head>
+<body>
+
+<main id="settings">
+  <h1>Lampette</h1>
+  <div class="preview" id="preview"></div>
+
+  <section>
+    <div class="label"><span>Color</span></div>
+    <div class="swatches" id="swatches"></div>
+  </section>
+
+  <section>
+    <div class="label"><span>Intensity</span><b id="intensityVal"></b></div>
+    <input type="range" id="intensity" min="5" max="100" step="1">
+  </section>
+
+  <section>
+    <div class="label"><span>Stay on for</span><b id="durationVal"></b></div>
+    <div class="chips" id="durations"></div>
+  </section>
+
+  <button id="start">Turn on</button>
+  <p class="hint">Tap the light to see time left or stop. Drag up or down to change intensity.</p>
+</main>
+
+<div id="light">
+  <div id="glow"></div>
+  <div id="hud">
+    <div class="pill" id="remaining"></div>
+    <button class="pill" id="stop">Stop</button>
+  </div>
+</div>
+
+<script src="NoSleep.min.js"></script>
+<script>
+(() => {
+  const COLORS = [
+    '#ffd9a0', // warm white
+    '#ff9a3c', // amber
+    '#ff3b1f', // red
+    '#ff4f9a', // pink
+    '#a24dff', // purple
+    '#3d5bff', // blue
+    '#24c6dc', // teal
+    '#3ee07a', // green
+    '#ffffff', // white
+  ];
+  const DURATIONS = [ // minutes, 0 = no limit
+    [5, '5 min'], [15, '15 min'], [30, '30 min'],
+    [60, '1 hour'], [120, '2 hours'], [0, 'No limit'],
+  ];
+  const FADE_MS = 30000;
+
+  const $ = id => document.getElementById(id);
+  const state = load();
+
+  function load() {
+    const d = { color: COLORS[1], intensity: 70, duration: 30 };
+    try { return Object.assign(d, JSON.parse(localStorage.getItem('lampette') || '{}')); }
+    catch { return d; }
+  }
+  function save() {
+    try { localStorage.setItem('lampette', JSON.stringify(state)); } catch {}
+  }
+
+  // Mix the color toward black by intensity, so the light dims without needing screen brightness control.
+  function dimmed(hex, pct) {
+    const n = parseInt(hex.slice(1), 16), k = pct / 100;
+    const r = Math.round((n >> 16 & 255) * k), g = Math.round((n >> 8 & 255) * k), b = Math.round((n & 255) * k);
+    return `rgb(${r},${g},${b})`;
+  }
+
+  // ---------- Settings UI ----------
+  const swatches = $('swatches');
+  COLORS.forEach(c => {
+    const b = document.createElement('button');
+    b.className = 'swatch'; b.style.background = c; b.dataset.color = c;
+    b.setAttribute('aria-label', c);
+    b.onclick = () => { state.color = c; render(); };
+    swatches.appendChild(b);
+  });
+  const custom = document.createElement('label');
+  custom.className = 'swatch custom';
+  custom.setAttribute('aria-label', 'Custom color');
+  const picker = document.createElement('input');
+  picker.type = 'color';
+  picker.oninput = () => { state.color = picker.value; render(); };
+  custom.appendChild(picker);
+  swatches.appendChild(custom);
+
+  const durations = $('durations');
+  DURATIONS.forEach(([m, label]) => {
+    const b = document.createElement('button');
+    b.className = 'chip'; b.textContent = label; b.dataset.min = m;
+    b.onclick = () => { state.duration = m; render(); };
+    durations.appendChild(b);
+  });
+
+  const intensity = $('intensity');
+  intensity.oninput = () => { state.intensity = +intensity.value; render(); };
+
+  function render() {
+    const preset = COLORS.includes(state.color);
+    swatches.querySelectorAll('.swatch').forEach(s =>
+      s.classList.toggle('active', s.dataset.color === state.color || (!preset && s === custom)));
+    if (!preset) custom.style.background = state.color;
+    picker.value = state.color;
+
+    intensity.value = state.intensity;
+    intensity.style.setProperty('--track', state.color);
+    $('intensityVal').textContent = state.intensity + '%';
+
+    durations.querySelectorAll('.chip').forEach(c =>
+      c.classList.toggle('active', +c.dataset.min === state.duration));
+    $('durationVal').textContent = DURATIONS.find(d => d[0] === state.duration)?.[1] || '';
+
+    $('preview').style.background = dimmed(state.color, state.intensity);
+    $('glow').style.background = dimmed(state.color, state.intensity);
+    save();
+  }
+  render();
+
+  // ---------- Keep screen awake ----------
+  // NoSleep.js uses the Screen Wake Lock API when available and falls back
+  // to a tiny muted looping video on older iOS / home-screen mode.
+  const noSleep = new NoSleep();
+  async function keepAwake() { try { await noSleep.enable(); } catch {} }
+  function releaseAwake() { try { noSleep.disable(); } catch {} }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && running && !fading) keepAwake();
+  });
+
+  // ---------- Light mode ----------
+  const light = $('light'), glow = $('glow'), hud = $('hud');
+  let running = false, endAt = 0, tick = null, fading = false, hudTimer = null;
+
+  async function start() {
+    running = true; fading = false;
+    endAt = state.duration ? Date.now() + state.duration * 60000 : 0;
+    glow.style.transition = 'opacity 1s linear';
+    glow.style.opacity = 1;
+    light.classList.add('on');
+    document.documentElement.requestFullscreen?.().catch(() => {});
+    await keepAwake();
+    showHud();
+    tick = setInterval(update, 250);
+    update();
+  }
+
+  function stop() {
+    running = false; clearInterval(tick);
+    releaseAwake();
+    light.classList.remove('on');
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+  }
+
+  function update() {
+    if (!endAt) { $('remaining').textContent = 'No time limit'; return; }
+    const left = endAt - Date.now();
+    if (left <= 0 && !fading) {
+      fading = true;
+      glow.style.transition = `opacity ${FADE_MS}ms linear`;
+      glow.style.opacity = 0;
+      $('remaining').textContent = 'Fading out…';
+      setTimeout(() => { if (fading) { releaseAwake(); clearInterval(tick); $('remaining').textContent = 'Off'; } }, FADE_MS);
+      return;
+    }
+    if (fading) return;
+    const s = Math.ceil(left / 1000);
+    const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+    $('remaining').textContent = (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(sec).padStart(2, '0') + ' left';
+  }
+
+  function showHud() {
+    hud.classList.add('show');
+    clearTimeout(hudTimer);
+    hudTimer = setTimeout(() => hud.classList.remove('show'), 3000);
+  }
+
+  // Tap shows HUD; vertical drag adjusts intensity.
+  let dragY = null, dragStart = 0, dragged = false;
+  light.addEventListener('pointerdown', e => {
+    if (e.target.closest('#stop')) return;
+    dragY = e.clientY; dragStart = state.intensity; dragged = false;
+  });
+  light.addEventListener('pointermove', e => {
+    if (dragY === null || fading) return;
+    const dy = dragY - e.clientY;
+    if (Math.abs(dy) > 8) dragged = true;
+    if (!dragged) return;
+    state.intensity = Math.max(5, Math.min(100, Math.round(dragStart + dy / window.innerHeight * 120)));
+    render();
+    $('remaining').textContent = 'Intensity ' + state.intensity + '%';
+    showHud();
+  });
+  light.addEventListener('pointerup', e => {
+    if (e.target.closest('#stop')) return;
+    if (!dragged) {
+      if (fading && !running) return;
+      showHud(); update();
+    }
+    dragY = null;
+  });
+  light.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+
+  $('start').onclick = start;
+  $('stop').onclick = stop;
+})();
+</script>
+</body>
+</html>
